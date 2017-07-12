@@ -46,8 +46,37 @@ gen_ppv <- function(dt, t_=time, id_= id, rrate_ppv_) {
 #' Generate MAP from blood pressure
 #' gen_map derives MAP
 #' @export
-gen_map <- function(bps, bpd) {
-    return(bpd + (bps-bpd)/3)
+gen_map <- function(dt, var.name='map',
+                        bp_m_a='NIHR_HIC_ICU_0110',
+                        bp_m_ni='NIHR_HIC_ICU_0111',
+                        bp_sys_a='NIHR_HIC_ICU_0112',
+                        bp_sys_ni='NIHR_HIC_ICU_0113',
+                        bp_dia_a='NIHR_HIC_ICU_0114',
+                        bp_dia_ni='NIHR_HIC_ICU_0115',
+                        verbose=FALSE) {
+  '
+  Calculate mean arterial pressure, using systolic/diastolic, also non-invasive when necessary.
+  Prefer invasive to non-invasive.
+  Prefer mean to systolic/diastolic calculation.
+  '
+  # combine from systolic and diastolic
+  sys <- ifelse(!is.na(dt[[bp_sys_a]]), dt[[bp_sys_a]], dt[[bp_sys_ni]])
+  dia <- ifelse(!is.na(dt[[bp_dia_a]]), dt[[bp_dia_a]], dt[[bp_dia_ni]])
+  m_sd <- dia + (sys - dia)/3
+  
+  # recorded mean pressure (prefer arterial to invasive)
+  m <- ifelse(!is.na(dt[[bp_m_a]]), dt[[bp_m_a]], dt[[bp_m_ni]])
+  
+  # prefer recorded over combined
+  map <- ifelse(!is.na(m), m, m_sd)
+  
+  dt[, (var.name) := map]
+  
+  if (verbose){
+    missing_new_map <- sum(is.na(map))
+    missing_original_map <- sum(is.na(dt[[bp_m_a]]))
+    print(paste0('Filled in ', missing_original_map - missing_new_map, ' (', signif(100*(missing_original_map - missing_new_map)/nrow(dt), 4), '% total rows) MAP values versus using just ', bp_m_a))
+  }
 }
 
 #' Choose first non-missing
