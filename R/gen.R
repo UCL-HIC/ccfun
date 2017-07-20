@@ -163,15 +163,28 @@ gen_los.icu <- function(dt, var.name="los.icu",
                         icu.dod.date="NIHR_HIC_ICU_0042",
                         icu.dod.time="NIHR_HIC_ICU_0043",
                         id.name="id",
-                        sim=TRUE) {
+                        sim=TRUE,
+                        sim.var="NIHR_HIC_ICU_0108") {
   '
   Generate ICU length of stay (hours)
+  If sim: do so "simply", using time to last measurement, optionally (if sim.var is not NULL) to last sim.var measurement (default HR)
+  Else: use admission and discharge time, or admission and date/time of death, depending on discharge status.
   '
   
   if (sim) {
     # check id and time available
     assert_that(all(sapply(c(id.name, "time"), function(x) x %in% names(dt))))
-    dt[, (var.name) := max(time, na.rm=TRUE), by=id.name]
+    if (is.null(sim.var)){
+      # just take max time from any record (WARNING: measurements can be recorded after discharge)
+      dt[, (var.name) := max(time, na.rm=TRUE), by=id.name]
+    } else {
+      # time is taken from between first and last measurement of sim.var (by default, heart rate)
+      assert_that(sim.var %in% names(dt))
+      dt[!is.na(get(sim.var)), (var.name) := max(time) - min(time), by=id.name]
+      # need to record var.name even when sim.var is NA
+      # WARNING: if a patient never has a recorded sim.var, this will produce NA for their LOS
+      dt[, (var.name) := mean(get(var.name), na.rm=TRUE), by=id.name]
+    }
   } else {
     # if alive on discharge, use 0412 for discharge time
     dt[get(icu.dis)=='A', (var.name) := time_length(ymd_hms(get(icu.dc.ts)) - ymd_hms(get(icu.in.ts)), unit='hours')]
@@ -181,7 +194,7 @@ gen_los.icu <- function(dt, var.name="los.icu",
     #   need to check BSDTP, then use either DOD/TOD (as above) or DDBSD/TDBSD
   }
 }
-
+                           
 #' @export
 gen_los.hosp <- function(dt, var.name="los.hosp",
         hosp.in.dt="NIHR_HIC_ICU_0032",
